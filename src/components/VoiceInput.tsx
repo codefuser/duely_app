@@ -171,7 +171,14 @@ const VoiceInput = ({ onResult }: Props) => {
     setListening(false);
   }, []);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
+    try {
+    // Mic permission force trigger
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    setError("Microphone permission denied");
+    return;
+  }
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setError('Voice input not supported on this browser');
