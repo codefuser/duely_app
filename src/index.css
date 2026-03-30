@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+
+@layer base {
+  :root {
+    --background: 210 20% 97%;
+    --foreground: 220 20% 10%;
+    --credit: 142 76% 45%; /* green */
+    --credit-soft: 142 70% 60%;
+
+    --payment: 0 84% 60%; /* red */
+    --payment-soft: 0 80% 70%;
+
+    --grid: 220 13% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
+
+    --primary: 168 76% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 20% 94%;
+    --secondary-foreground: 220 20% 20%;
+
+    --muted: 210 15% 92%;
+    --muted-foreground: 215 14% 46%;
+
+    --accent: 168 50% 94%;
+    --accent-foreground: 168 76% 30%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --credit: 0 84% 60%;
+    --credit-foreground: 0 0% 100%;
+    --credit-bg: 0 70% 96%;
+
+    --payment: 142 71% 45%;
+    --payment-foreground: 0 0% 100%;
+    --payment-bg: 142 50% 95%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 214 20% 90%;
+    --input: 214 20% 90%;
+    --ring: 168 76% 42%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 220 20% 8%;
+    --foreground: 210 20% 96%;
+
+    --card: 220 20% 12%;
+    --card-foreground: 210 20% 96%;
+
+    --popover: 220 20% 12%;
+    --popover-foreground: 210 20% 96%;
+
+    --primary: 168 76% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 210 20% 90%;
+
+    --muted: 220 15% 16%;
+    --muted-foreground: 215 14% 60%;
+
+    --accent: 168 40% 15%;
+    --accent-foreground: 168 76% 60%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --credit: 0 84% 55%;
+    --credit-foreground: 0 0% 100%;
+    --credit-bg: 0 50% 15%;
+
+    --payment: 142 71% 40%;
+    --payment-foreground: 0 0% 100%;
+    --payment-bg: 142 40% 12%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 15% 20%;
+    --input: 220 15% 20%;
+    --ring: 168 76% 42%;
+
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: "Plus Jakarta Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .text-credit {
+    color: hsl(var(--credit));
+  }
+  .text-payment {
+    color: hsl(var(--payment));
+  }
+  .bg-credit {
+    background-color: hsl(var(--credit));
+  }
+  .bg-payment {
+    background-color: hsl(var(--payment));
+  }
+  .bg-credit-light {
+    background-color: hsl(var(--credit-bg));
+  }
+  .bg-payment-light {
+    background-color: hsl(var(--payment-bg));
+  }
+  .text-warning {
+    color: hsl(var(--warning));
+  }
+  .bg-warning {
+    background-color: hsl(var(--warning));
+  }
+
+  /* Safe area utilities */
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

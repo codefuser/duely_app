@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Duely -  Track Your Dues</string>
+    <string name="title_activity_main">Duely -  Track Your Dues</string>
+    <string name="package_name">com.duely.app</string>
+    <string name="custom_url_scheme">com.duely.app</string>
+</resources>
