@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, TouchEvent } from 'react';
 import { AnimatePresence, motion, Reorder } from 'framer-motion';
-import { Plus, Home, BarChart3, Settings, Upload, RotateCcw, Download, Moon, Sun, Search, X, Palette, Layers, Wallet, Shield, FileText, HelpCircle, Info, Mail, AlertTriangle } from 'lucide-react';
+import { Plus, Home, BarChart3, Settings, Upload, RotateCcw, Download, Moon, Sun, Search, X, Palette, Layers, Wallet, Shield, FileText, HelpCircle, Info, Mail, AlertTriangle, Filter, ChevronDown, ArrowUpDown, TrendingUp, TrendingDown } from 'lucide-react';
 import { useStore } from '@/hooks/useStore';
 import { useTheme, THEME_PRESETS } from '@/hooks/useTheme';
 import { useTabs } from '@/hooks/useTabs';
@@ -15,9 +15,14 @@ import ExportDialog from '@/components/ExportDialog';
 import TabManager from '@/components/TabManager';
 import LegalPages from '@/components/LegalPages';
 import BudgetSettings from '@/components/BudgetSettings';
+import DashboardSummary from '@/components/DashboardSummary';
 
 type NavTab = 'home' | 'analytics' | 'settings';
 type LegalPage = 'privacy' | 'terms' | 'about' | 'help' | 'contact';
+type SortOrder = 'none' | 'low_high' | 'high_low';
+type DueFilter = 'all' | 'i_owe' | 'they_owe';
+
+const NAV_TABS: NavTab[] = ['home', 'analytics', 'settings'];
 
 const Index = () => {
   const [splashDone, setSplashDone] = useState(false);
@@ -34,12 +39,25 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [legalPage, setLegalPage] = useState<LegalPage | null>(null);
 
+  // Filter state
+  const [showFilters, setShowFilters] = useState(false);
+  const [dueFilter, setDueFilter] = useState<DueFilter>('all');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('none');
+
   const store = useStore();
   const theme = useTheme();
   const tabsHook = useTabs();
 
-  // Swipe state
+  // Swipe for category tabs
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  // Swipe for bottom nav
+  const navTouchStart = useRef<{ x: number; y: number } | null>(null);
+
+  // Dual balance calculation
+  const totalIOwe = useMemo(() =>
+    store.shops.reduce((sum, s) => sum + s.iOweDue, 0), [store.shops]);
+  const totalTheyOwe = useMemo(() =>
+    store.shops.reduce((sum, s) => sum + s.theyOweDue, 0), [store.shops]);
 
   const filteredShops = useMemo(() => {
     let shops = store.shops;
@@ -50,10 +68,21 @@ const Index = () => {
       const q = searchQuery.toLowerCase();
       shops = shops.filter(s => s.name.toLowerCase().includes(q));
     }
+    // Due direction filter
+    if (dueFilter === 'i_owe') {
+      shops = shops.filter(s => s.iOweDue > 0);
+    } else if (dueFilter === 'they_owe') {
+      shops = shops.filter(s => s.theyOweDue > 0);
+    }
+    // Sort
+    if (sortOrder === 'low_high') {
+      shops = [...shops].sort((a, b) => Math.abs(a.due) - Math.abs(b.due));
+    } else if (sortOrder === 'high_low') {
+      shops = [...shops].sort((a, b) => Math.abs(b.due) - Math.abs(a.due));
+    }
     return shops;
-  }, [store.shops, activeTabId, searchQuery]);
+  }, [store.shops, activeTabId, searchQuery, dueFilter, sortOrder]);
 
-  const [reorderList, setReorderList] = useState<string[]>([]);
   const reorderIds = useMemo(() => filteredShops.map(s => s.id), [filteredShops]);
 
   const handleSplashFinish = useCallback(() => setSplashDone(true), []);
@@ -67,12 +96,19 @@ const Index = () => {
   const handleImport = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.json';
+    input.accept = '.json,application/json';
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         const reader = new FileReader();
-        reader.onload = () => store.importData(reader.result as string);
+        reader.onload = () => {
+          try {
+            store.importData(reader.result as string);
+            alert('Data imported successfully!');
+          } catch {
+            alert('Invalid backup file. Please select a valid Duely backup.');
+          }
+        };
         reader.readAsText(file);
       }
     };
@@ -125,6 +161,22 @@ const Index = () => {
     touchStart.current = null;
   };
 
+  // Swipe handler for bottom nav tabs
+  const handleNavTouchStart = (e: TouchEvent) => {
+    navTouchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+
+  const handleNavTouchEnd = (e: TouchEvent) => {
+    if (!navTouchStart.current) return;
+    const dx = e.changedTouches[0].clientX - navTouchStart.current.x;
+    const dy = Math.abs(e.changedTouches[0].clientY - navTouchStart.current.y);
+    if (Math.abs(dx) < 60 || dy > Math.abs(dx)) return;
+    const idx = NAV_TABS.indexOf(navTab);
+    if (dx < 0 && idx < NAV_TABS.length - 1) setNavTab(NAV_TABS[idx + 1]);
+    if (dx > 0 && idx > 0) setNavTab(NAV_TABS[idx - 1]);
+    navTouchStart.current = null;
+  };
+
   // Analytics totals
   const analyticsShops = useMemo(() => {
     if (analyticsTabId === 'all') return store.shops;
@@ -163,12 +215,17 @@ const Index = () => {
     </div>
   );
 
-  // Budget warnings
   const budgetAlerts = store.budgetWarnings;
   const hasBudgetWarning = budgetAlerts.global || budgetAlerts.tabs.length > 0;
 
+  const activeFiltersCount = (dueFilter !== 'all' ? 1 : 0) + (sortOrder !== 'none' ? 1 : 0);
+
   return (
-    <div className="min-h-screen bg-background flex flex-col max-w-md mx-auto relative">
+    <div
+      className="min-h-[100dvh] bg-background flex flex-col max-w-md mx-auto relative"
+      onTouchStart={handleNavTouchStart}
+      onTouchEnd={handleNavTouchEnd}
+    >
       {/* Overlays */}
       <AnimatePresence>
         {addingShop && (
@@ -237,7 +294,7 @@ const Index = () => {
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto pb-20">
+      <div className="flex-1 overflow-auto pb-[calc(60px+env(safe-area-inset-bottom,0px))]">
         {navTab === 'home' && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -245,13 +302,31 @@ const Index = () => {
             onTouchStart={handleTouchStart}
             onTouchEnd={(e) => handleTouchEnd(e, tabsHook.tabs, activeTabId, setActiveTabId)}
           >
-            <div className="bg-primary rounded-b-3xl p-5 pb-8 safe-top">
-              <h1 className="text-primary-foreground/70 text-sm pt-7 font-medium">Total Pending</h1>
-              <p className="text-4xl font-extrabold text-primary-foreground mt-1">
-                <AnimatedCounter value={store.totalDue} />
-              </p>
-              <p className="text-primary-foreground/60 text-xs mt-1.5">
-                Across {store.shops.filter(s => s.due > 0).length} {store.shops.filter(s => s.due > 0).length !== 1 ? 'entries' : 'entry'}
+            {/* Header with dual balance */}
+            <div className="bg-primary rounded-b-3xl p-5 pb-6 pt-[calc(1.25rem+env(safe-area-inset-top,0px))]">
+              <h1 className="text-primary-foreground/70 text-sm font-medium">Your Balance</h1>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="bg-primary-foreground/10 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <TrendingDown className="w-3.5 h-3.5 text-primary-foreground/70" />
+                    <p className="text-primary-foreground/70 text-[10px] font-medium uppercase tracking-wider">You Owe</p>
+                  </div>
+                  <p className="text-2xl font-extrabold text-primary-foreground">
+                    <AnimatedCounter value={totalIOwe} />
+                  </p>
+                </div>
+                <div className="bg-primary-foreground/10 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <TrendingUp className="w-3.5 h-3.5 text-primary-foreground/70" />
+                    <p className="text-primary-foreground/70 text-[10px] font-medium uppercase tracking-wider">You'll Receive</p>
+                  </div>
+                  <p className="text-2xl font-extrabold text-primary-foreground">
+                    <AnimatedCounter value={totalTheyOwe} />
+                  </p>
+                </div>
+              </div>
+              <p className="text-primary-foreground/60 text-xs mt-2.5">
+                Across {store.shops.length} {store.shops.length !== 1 ? 'entries' : 'entry'}
               </p>
             </div>
 
@@ -287,28 +362,115 @@ const Index = () => {
 
             {renderCategoryTabs(activeTabId, setActiveTabId)}
 
+            {/* Search + Filter bar */}
             {store.shops.length > 0 && (
               <div className="px-4 pt-1 pb-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search..."
-                    className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-card border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
-                  />
-                  {searchQuery && (
-                    <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      placeholder="Search..."
+                      className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-card border border-border text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+                    />
+                    {searchQuery && (
+                      <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`px-3 rounded-xl border transition-colors flex items-center gap-1.5 shrink-0 ${
+                      activeFiltersCount > 0
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-card border-border text-muted-foreground hover:bg-accent'
+                    }`}
+                  >
+                    <Filter className="w-4 h-4" />
+                    {activeFiltersCount > 0 && (
+                      <span className="text-xs font-bold">{activeFiltersCount}</span>
+                    )}
+                  </button>
                 </div>
+
+                {/* Filter dropdown */}
+                <AnimatePresence>
+                  {showFilters && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="bg-card border border-border rounded-xl p-3 mt-2 space-y-3">
+                        {/* Due type filter */}
+                        <div>
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Due Type</p>
+                          <div className="flex gap-2">
+                            {([
+                              { key: 'all' as DueFilter, label: 'All' },
+                              { key: 'i_owe' as DueFilter, label: 'I Owe' },
+                              { key: 'they_owe' as DueFilter, label: 'They Owe Me' },
+                            ]).map(f => (
+                              <button
+                                key={f.key}
+                                onClick={() => setDueFilter(f.key)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                  dueFilter === f.key
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted text-muted-foreground'
+                                }`}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Sort by amount */}
+                        <div>
+                          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Sort by Amount</p>
+                          <div className="flex gap-2">
+                            {([
+                              { key: 'none' as SortOrder, label: 'Default' },
+                              { key: 'low_high' as SortOrder, label: 'Low → High' },
+                              { key: 'high_low' as SortOrder, label: 'High → Low' },
+                            ]).map(s => (
+                              <button
+                                key={s.key}
+                                onClick={() => setSortOrder(s.key)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                  sortOrder === s.key
+                                    ? 'bg-primary text-primary-foreground'
+                                    : 'bg-muted text-muted-foreground'
+                                }`}
+                              >
+                                {s.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {activeFiltersCount > 0 && (
+                          <button
+                            onClick={() => { setDueFilter('all'); setSortOrder('none'); }}
+                            className="text-xs text-destructive font-medium"
+                          >
+                            Clear Filters
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
 
-            {/* Shop List with drag reorder */}
+            {/* Shop List - normal scroll, drag only via handle */}
             <div className="p-4 space-y-3">
-              {filteredShops.length === 0 && !searchQuery ? (
+              {filteredShops.length === 0 && !searchQuery && dueFilter === 'all' ? (
                 <div className="text-center py-16">
                   <p className="text-5xl mb-3">{activeTabId === 'persons' ? '👤' : '🏪'}</p>
                   <p className="text-muted-foreground font-medium">
@@ -316,22 +478,26 @@ const Index = () => {
                   </p>
                   <p className="text-muted-foreground/70 text-sm mt-1">Tap + to add</p>
                 </div>
-              ) : filteredShops.length === 0 && searchQuery ? (
+              ) : filteredShops.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-muted-foreground text-sm">No results for "{searchQuery}"</p>
+                  <p className="text-muted-foreground text-sm">No results found</p>
                 </div>
               ) : (
                 <Reorder.Group
                   axis="y"
                   values={reorderIds}
                   onReorder={(newOrder) => {
-                    setReorderList(newOrder);
                     store.reorderShops(activeTabId, newOrder);
                   }}
                   className="space-y-3"
                 >
                   {filteredShops.map(shop => (
-                    <Reorder.Item key={shop.id} value={shop.id}>
+                    <Reorder.Item
+                      key={shop.id}
+                      value={shop.id}
+                      dragListener={false}
+                      id={`drag-${shop.id}`}
+                    >
                       <ShopCard
                         id={shop.id}
                         name={shop.name}
@@ -342,6 +508,7 @@ const Index = () => {
                         tabId={shop.tabId}
                         onClick={() => setSelectedShopId(shop.id)}
                         onDelete={() => store.deleteShop(shop.id)}
+                        dragControls
                       />
                     </Reorder.Item>
                   ))}
@@ -355,11 +522,11 @@ const Index = () => {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="p-5 safe-top"
+            className="p-5 pt-[calc(1.25rem+env(safe-area-inset-top,0px))]"
             onTouchStart={handleTouchStart}
             onTouchEnd={(e) => handleTouchEnd(e, tabsHook.tabs, analyticsTabId, setAnalyticsTabId)}
           >
-            <h2 className="text-xl font-bold mb-3 pt-7">Analytics</h2>
+            <h2 className="text-xl font-bold mb-3">Analytics</h2>
 
             <div className="mb-4 -mx-5">
               {renderCategoryTabs(analyticsTabId, setAnalyticsTabId)}
@@ -375,6 +542,9 @@ const Index = () => {
                 <p className="text-2xl font-bold text-payment mt-1">₹{totalPaid}</p>
               </div>
             </div>
+
+            {/* Dashboard Summary - Top debtors + Pie chart */}
+            <DashboardSummary shops={analyticsShops} getShopTransactions={store.getShopTransactions} />
 
             <AnalyticsCharts filterTabId={analyticsTabId} />
 
@@ -410,8 +580,8 @@ const Index = () => {
         )}
 
         {navTab === 'settings' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-5 safe-top">
-            <h2 className="text-xl font-bold mb-4 pt-7">Settings</h2>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-5 pt-[calc(1.25rem+env(safe-area-inset-top,0px))]">
+            <h2 className="text-xl font-bold mb-4">Settings</h2>
             <div className="space-y-3">
               {/* Dark Mode */}
               <button onClick={theme.toggleDark} className="w-full flex items-center gap-3 bg-card rounded-xl p-4 border border-border text-left hover:bg-accent transition-colors">
@@ -491,7 +661,7 @@ const Index = () => {
                 <Download className="w-5 h-5 text-primary" />
                 <div>
                   <p className="text-sm font-medium">Export Data</p>
-                  <p className="text-xs text-muted-foreground">Download backup as JSON</p>
+                  <p className="text-xs text-muted-foreground">Download backup as JSON or PDF</p>
                 </div>
               </button>
               <button onClick={handleImport} className="w-full flex items-center gap-3 bg-card rounded-xl p-4 border border-border text-left hover:bg-accent transition-colors">
@@ -504,7 +674,7 @@ const Index = () => {
 
               {/* Legal / Info Section */}
               <div className="pt-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1 ">About & Legal</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">About & Legal</p>
               </div>
               {([
                 { key: 'about' as LegalPage, icon: Info, label: 'About Duely', desc: 'Version, features, and mission' },
@@ -540,7 +710,7 @@ const Index = () => {
 
       {/* FAB with menu */}
       {navTab === 'home' && !addingShop && !selectedShopId && (
-        <div className="fixed bottom-24 z-20" style={{ right: 'max(20px, calc((100vw - 448px)/2 + 20px))' }}>
+        <div className="fixed z-20" style={{ bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))', right: 'max(20px, calc((100vw - 448px)/2 + 20px))' }}>
           <AnimatePresence>
             {showFabMenu && activeTabId === 'all' && (
               <motion.div
@@ -569,7 +739,7 @@ const Index = () => {
 
       {/* Bottom Nav */}
       <div className="fixed bottom-0 left-0 right-0 z-10">
-        <div className="max-w-md mx-auto bg-card border-t border-border px-6 flex justify-around safe-bottom">
+        <div className="max-w-md mx-auto bg-card border-t border-border px-6 flex justify-around pb-[env(safe-area-inset-bottom,0px)] pt-1">
           {([
             { key: 'home' as NavTab, icon: Home, label: 'Home' },
             { key: 'analytics' as NavTab, icon: BarChart3, label: 'Analytics' },

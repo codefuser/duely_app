@@ -10,7 +10,7 @@ interface Props {
 
 const content: Record<PageType, { title: string; body: React.ReactNode }> = {
   privacy: {
-    title: 'Privacy Policy ',
+    title: 'Privacy Policy',
     body: (
       <div className="space-y-4 text-sm text-muted-foreground leading-relaxed">
         <p className="text-foreground font-medium">Last updated: March 2026</p>
@@ -138,7 +138,7 @@ const LegalPages = ({ page, onBack }: Props) => {
       animate={{ x: 0 }}
       exit={{ x: '100%' }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed pt-5 inset-0 z-40 bg-background flex flex-col"
+      className="fixed inset-0 z-40 bg-background flex flex-col"
     >
       <div className="flex items-center gap-3 p-4 border-b border-border safe-top">
         <button onClick={onBack} className="p-2 -ml-2 rounded-xl hover:bg-muted transition-colors">

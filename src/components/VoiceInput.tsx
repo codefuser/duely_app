@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, X, Globe } from 'lucide-react';
+import { Mic, MicOff, X } from 'lucide-react';
 
 interface Props {
   onResult: (itemName: string, amount: number) => void;
@@ -42,7 +42,6 @@ const TAMIL_LARGE: Record<string, number> = {
   'நூறு': 100, 'ஆயிரம்': 1000,
 };
 
-// Romanized Tamil number words
 const ROMANIZED_TAMIL: Record<string, number> = {
   'ondru': 1, 'onnu': 1, 'oru': 1,
   'irandu': 2, 'rendu': 2,
@@ -66,29 +65,24 @@ const ROMANIZED_TAMIL: Record<string, number> = {
   'aayiram': 1000, 'ayiram': 1000,
 };
 
-// Tamil Unicode digit to ASCII
 function tamilDigitsToAscii(text: string): string {
   return text.replace(/[௦-௯]/g, ch => String(ch.charCodeAt(0) - 0x0BE6));
 }
 
 function parseTamilAmount(text: string): number | null {
-  // First try Tamil Unicode digits
   const asciiText = tamilDigitsToAscii(text);
   const digitMatch = asciiText.match(/(\d+(?:\.\d+)?)/);
   if (digitMatch) return parseFloat(digitMatch[1]);
 
   const lower = text.toLowerCase().trim();
 
-  // Check compound numbers first
   for (const [word, val] of Object.entries(TAMIL_COMPOUND_TENS)) {
     if (lower.includes(word)) return val;
   }
 
-  // Check romanized Tamil compounds (e.g., "irupathu anju" = 25)
   let total = 0;
   let found = false;
 
-  // Check large multipliers
   for (const [word, val] of Object.entries(TAMIL_LARGE)) {
     if (lower.includes(word)) { total += val; found = true; }
   }
@@ -96,7 +90,6 @@ function parseTamilAmount(text: string): number | null {
     if (val >= 100 && lower.includes(word)) { total += val; found = true; }
   }
 
-  // Check tens
   for (const [word, val] of Object.entries(TAMIL_TENS)) {
     if (lower.includes(word)) { total += val; found = true; break; }
   }
@@ -106,7 +99,6 @@ function parseTamilAmount(text: string): number | null {
     }
   }
 
-  // Check units
   for (const [word, val] of Object.entries(TAMIL_UNITS)) {
     if (lower.includes(word)) { total += val; found = true; break; }
   }
@@ -122,7 +114,6 @@ function parseTamilAmount(text: string): number | null {
 function parseVoice(text: string, lang: string): { item?: string; amount?: number } | null {
   const cleaned = tamilDigitsToAscii(text);
 
-  // Try English-style parsing first (works for both languages when digits are present)
   const amountMatch = cleaned.match(/(\d+(?:\.\d+)?)\s*(?:rupees?|rs\.?|₹|ரூபாய்|ரூபா)?/i);
   if (amountMatch) {
     const amount = parseFloat(amountMatch[1]);
@@ -134,11 +125,9 @@ function parseVoice(text: string, lang: string): { item?: string; amount?: numbe
     return { item: item || undefined, amount };
   }
 
-  // Try Tamil word-based number parsing
   if (lang === 'ta-IN' || !amountMatch) {
     const tamilAmount = parseTamilAmount(text);
     if (tamilAmount) {
-      // Remove currency and number words to extract item name
       let item = text;
       const removeWords = [
         ...Object.keys(TAMIL_UNITS), ...Object.keys(TAMIL_TENS),
@@ -148,7 +137,6 @@ function parseVoice(text: string, lang: string): { item?: string; amount?: numbe
       for (const w of removeWords) {
         item = item.replace(new RegExp(w, 'gi'), '');
       }
-      // Also try romanized
       for (const w of Object.keys(ROMANIZED_TAMIL)) {
         item = item.replace(new RegExp(`\\b${w}\\b`, 'gi'), '');
       }
@@ -167,6 +155,7 @@ const VoiceInput = ({ onResult }: Props) => {
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState('');
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem('duely_voice_lang') as Lang) || 'en-IN');
+  const recognitionRef = useRef<any>(null);
 
   const toggleLang = () => {
     const next: Lang = lang === 'en-IN' ? 'ta-IN' : 'en-IN';
@@ -174,17 +163,31 @@ const VoiceInput = ({ onResult }: Props) => {
     localStorage.setItem('duely_voice_lang', next);
   };
 
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setListening(false);
+  }, []);
+
   const startListening = useCallback(() => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      setError('Voice input not supported');
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError('Voice input not supported on this browser');
       return;
     }
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    // Stop existing
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     recognition.lang = lang;
     recognition.interimResults = false;
-    recognition.maxAlternatives = 3;
+    recognition.maxAlternatives = 5;
     recognition.continuous = false;
 
     recognition.onstart = () => {
@@ -194,7 +197,6 @@ const VoiceInput = ({ onResult }: Props) => {
     };
 
     recognition.onresult = (event: any) => {
-      // Try all alternatives
       for (let i = 0; i < event.results[0].length; i++) {
         const text = event.results[0][i].transcript;
         const parsed = parseVoice(text, lang);
@@ -211,14 +213,40 @@ const VoiceInput = ({ onResult }: Props) => {
       setListening(false);
     };
 
-    recognition.onerror = () => {
-      setError(lang === 'ta-IN' ? 'கேட்கவில்லை. மீண்டும் முயற்சிக்கவும்' : 'Could not hear you. Try again.');
+    recognition.onerror = (event: any) => {
+      const errType = event.error;
+      if (errType === 'not-allowed' || errType === 'service-not-allowed') {
+        setError('Microphone permission denied. Please allow microphone access in your browser settings.');
+      } else if (errType === 'network') {
+        setError('Network error. Check your internet connection.');
+      } else if (errType === 'no-speech') {
+        setError(lang === 'ta-IN' ? 'பேச்சு கேட்கவில்லை. மீண்டும் முயற்சிக்கவும்' : 'No speech detected. Please try again.');
+      } else {
+        setError(lang === 'ta-IN' ? 'கேட்கவில்லை. மீண்டும் முயற்சிக்கவும்' : 'Could not hear you. Try again.');
+      }
       setListening(false);
     };
 
-    recognition.onend = () => setListening(false);
-    recognition.start();
+    recognition.onend = () => {
+      setListening(false);
+      recognitionRef.current = null;
+    };
+
+    try {
+      recognition.start();
+    } catch {
+      setError('Could not start voice input. Please try again.');
+      setListening(false);
+    }
   }, [onResult, lang]);
+
+  const handleMicClick = () => {
+    if (listening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
 
   return (
     <div className="relative flex items-center gap-1.5">
@@ -233,8 +261,7 @@ const VoiceInput = ({ onResult }: Props) => {
 
       <motion.button
         whileTap={{ scale: 0.9 }}
-        onClick={startListening}
-        disabled={listening}
+        onClick={handleMicClick}
         className={`p-3 rounded-xl transition-colors ${listening ? 'bg-credit text-credit-foreground' : 'bg-accent text-accent-foreground hover:bg-primary hover:text-primary-foreground'}`}
       >
         {listening ? <MicOff className="w-5 h-5 animate-pulse" /> : <Mic className="w-5 h-5" />}
